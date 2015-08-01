@@ -1,6 +1,6 @@
 package ggpipe
 
-// provide a buffered pipe to connect two thread(goroutine)
+//provide a buffered pipe to connect two thread(goroutine)
 
 import (
 	"errors"
@@ -9,34 +9,34 @@ import (
 )
 
 var (
-	// occurs when ReadBlock with a block size larger than capacity
+	//occurs when ReadBlock with a block size larger than capacity
 	ErrTooLargeDemand = errors.New("demand is not supposed to be larger than capacity")
 
-	// occurs when WriteBlock with a block size larger than capacity
+	//occurs when WriteBlock with a block size larger than capacity
 	ErrTooLargeProvide = errors.New("provide is not supposed to be larger than capacity")
 
-	// default error occurs when any operation after the reader call close
+	//default error occurs when any operation after the reader call close
 	ErrReaderClosed = errors.New("pipe already close by reader")
 )
 
 type bufferedPipe struct {
-	lock     sync.Mutex // guard for members
-	data     []byte     // data buffer
-	cp       int        // the max size of data can be stored in buffer
-	sz       int        // the size of data currently stored in buffer
-	notEmpty sync.Cond  // tell reader to read
-	notFull  sync.Cond  // tell writer to write
-	rerr     error      // the ending err the reader want to tell writer
-	werr     error      // the ending err the writer want to tell reader
+	lock     sync.Mutex //guard for members
+	data     []byte     //data buffer
+	cp       int        //the max size of data can be stored in buffer
+	sz       int        //the size of data currently stored in buffer
+	notEmpty sync.Cond  //tell reader to read
+	notFull  sync.Cond  //tell writer to write
+	rerr     error      //the ending err the reader want to tell writer
+	werr     error      //the ending err the writer want to tell reader
 }
 
-// return the capacity of the buffer
-// it's thread safe since it will not change once the pipe is created
+//return the capacity of the buffer.
+//it's thread safe since it will not change once the pipe is created.
 func (bp *bufferedPipe) capacity() int {
 	return bp.cp
 }
 
-// tells the size of data currently stored in the pipe
+//tells the size of data currently stored in the pipe.
 func (bp *bufferedPipe) buffered() int {
 	bp.lock.Lock()
 	defer bp.lock.Unlock()
@@ -44,7 +44,7 @@ func (bp *bufferedPipe) buffered() int {
 	return bp.sz
 }
 
-// read data from pipe, block until blockSize bytes has been read
+//read data from pipe, block until blockSize bytes has been read.
 func (bp *bufferedPipe) read(b []byte, blockSize int) (int, error) {
 	bp.lock.Lock()
 	defer bp.lock.Unlock()
@@ -79,7 +79,7 @@ func (bp *bufferedPipe) read(b []byte, blockSize int) (int, error) {
 	return n, nil
 }
 
-// write data to pipe, block until blockSize bytes has been written
+//write data to pipe, block until blockSize bytes has been written.
 func (bp *bufferedPipe) write(b []byte, blockSize int) (int, error) {
 	bp.lock.Lock()
 	defer bp.lock.Unlock()
@@ -113,7 +113,7 @@ func (bp *bufferedPipe) write(b []byte, blockSize int) (int, error) {
 	return n, nil
 }
 
-// reader close the pipe
+//reader close the pipe.
 func (bp *bufferedPipe) rclose(err error) {
 	if err == nil {
 		err = ErrReaderClosed
@@ -127,7 +127,7 @@ func (bp *bufferedPipe) rclose(err error) {
 	bp.notFull.Signal()
 }
 
-// writer close the pipe
+//writer close the pipe.
 func (bp *bufferedPipe) wclose(err error) {
 	if err == nil {
 		err = io.EOF
@@ -145,35 +145,35 @@ type BufferedPipeReader struct {
 	bp *bufferedPipe
 }
 
-// read data from pipe as much as possible, max : len(data)
-// if there is no data currently in the pipe, it will block
+//read data from pipe as much as possible, max : len(data).
+//if there is no data currently in the pipe, it will block.
 func (r *BufferedPipeReader) Read(data []byte) (n int, err error) {
 	return r.bp.read(data, 1)
 }
 
-// block until len(data) bytes has ben read
-// warn: a deadlock may happen when ReadBlock and WriteBlock both be used
+//block until len(data) bytes has ben read.
+//warn: a deadlock may happen when ReadBlock and WriteBlock both be used.
 func (r *BufferedPipeReader) ReadBlock(data []byte) (n int, err error) {
 	return r.bp.read(data, len(data))
 }
 
-// normal close, without error
+//normal close, without error.
 func (r *BufferedPipeReader) Close() error {
 	return r.CloseWithError(nil)
 }
 
-// close with a error that will be got by the writer
+//close with a error that will be got by the writer.
 func (r *BufferedPipeReader) CloseWithError(err error) error {
 	r.bp.rclose(err)
 	return nil
 }
 
-// tells the size of data currently stored in the pipe
+//tells the size of data currently stored in the pipe.
 func (r *BufferedPipeReader) Buffered() int {
 	return r.bp.buffered()
 }
 
-// the max size of data that can be stored in the pipe
+//the max size of data that can be stored in the pipe.
 func (r *BufferedPipeReader) Capacity() int {
 	return r.bp.capacity()
 }
@@ -182,40 +182,40 @@ type BufferedPipeWriter struct {
 	bp *bufferedPipe
 }
 
-// write data to pipe as much as possible, max : len(data)
-// if there is no data currently can be written to the pipe, it will block
+//write data to pipe as much as possible, max to len(data).
+//if there is no data currently can be written to the pipe, it will block.
 func (w *BufferedPipeWriter) Write(data []byte) (n int, err error) {
 	return w.bp.write(data, 1)
 }
 
-// block until len(data) bytes has ben written
-// warn: a deadlock may happen when ReadBlock and WriteBlock both be used
+//block until len(data) bytes has ben written.
+//warn: a deadlock may happen when ReadBlock and WriteBlock both be used.
 func (w *BufferedPipeWriter) WriteBlock(data []byte) (n int, err error) {
 	return w.bp.write(data, len(data))
 }
 
-// close with a error that will be got by the reader
+//close with a error that will be got by the reader.
 func (w *BufferedPipeWriter) CloseWithError(err error) error {
 	w.bp.wclose(err)
 	return nil
 }
 
-// normal close, without error
+//normal close, without error.
 func (w *BufferedPipeWriter) Close() error {
 	return w.CloseWithError(nil)
 }
 
-// tells the size of data currently stored in the pipe
+//tells the size of data currently stored in the pipe.
 func (w *BufferedPipeWriter) Buffered() int {
 	return w.bp.buffered()
 }
 
-// the max size of data that can be stored in the pipe
+//the max size of data that can be stored in the pipe.
 func (w *BufferedPipeWriter) Capacity() int {
 	return w.bp.capacity()
 }
 
-// new a pipe with capacity
+//new a pipe with capacity.
 func BufferedPipe(cp int) (*BufferedPipeReader, *BufferedPipeWriter) {
 	bp := new(bufferedPipe)
 	bp.cp = cp
