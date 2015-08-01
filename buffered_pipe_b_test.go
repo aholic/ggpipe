@@ -11,7 +11,10 @@ func BenchmarkBufferedPipe(b *testing.B) {
 
 	go func() {
 		for i := 0; i < b.N; i++ {
-			pw.Write(data)
+			for written := 0; written < len(data); {
+				n, _ := pw.Write(data[written:])
+				written += n
+			}
 		}
 		pw.Close()
 		done <- true

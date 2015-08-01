@@ -4,7 +4,6 @@ package ggpipe
 // actually, it's a BoundedBlockingQueue
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"sync"
@@ -12,8 +11,9 @@ import (
 
 type bufferedPipe struct {
 	lock     sync.Mutex
-	data     bytes.Buffer
+	data     []byte
 	cp       int
+	sz       int
 	notEmpty sync.Cond
 	notFull  sync.Cond
 	rerr     error
@@ -28,7 +28,7 @@ func (bp *bufferedPipe) buffered() int {
 	bp.lock.Lock()
 	defer bp.lock.Unlock()
 
-	return bp.data.Len()
+	return bp.sz
 }
 
 func (bp *bufferedPipe) read(b []byte) (int, error) {
@@ -40,7 +40,7 @@ func (bp *bufferedPipe) read(b []byte) (int, error) {
 			return 0, errors.New("pipe already close by reader")
 		}
 
-		if bp.data.Len() != 0 {
+		if bp.sz != 0 {
 			break
 		}
 
@@ -51,12 +51,13 @@ func (bp *bufferedPipe) read(b []byte) (int, error) {
 		bp.notEmpty.Wait()
 	}
 
-	n, err := bp.data.Read(b)
-	if bp.data.Len() < bp.cp {
+	n := copy(b, bp.data[:bp.sz])
+	bp.sz -= n
+	if bp.sz < bp.cp {
 		bp.notFull.Signal()
 	}
 
-	return n, err
+	return n, nil
 }
 
 func (bp *bufferedPipe) write(b []byte) (int, error) {
@@ -68,7 +69,7 @@ func (bp *bufferedPipe) write(b []byte) (int, error) {
 			return 0, errors.New("pipe already close by writer")
 		}
 
-		if bp.data.Len() < bp.cp {
+		if bp.sz < bp.cp {
 			break
 		}
 
@@ -79,17 +80,13 @@ func (bp *bufferedPipe) write(b []byte) (int, error) {
 		bp.notFull.Wait()
 	}
 
-	n := len(b)
-	if bp.data.Len()+n > bp.cp {
-		n = bp.cp - bp.data.Len()
-	}
-
-	n, err := bp.data.Write(b[:n])
-	if bp.data.Len() > 0 {
+	n := copy(bp.data[bp.sz:], b)
+	bp.sz += n
+	if bp.sz > 0 {
 		bp.notEmpty.Signal()
 	}
 
-	return n, err
+	return n, nil
 }
 
 func (bp *bufferedPipe) rclose(err error) {
@@ -171,6 +168,7 @@ func (w *BufferedPipeWriter) Capacity() int {
 func BufferedPipe(cp int) (*BufferedPipeReader, *BufferedPipeWriter) {
 	bp := new(bufferedPipe)
 	bp.cp = cp
+	bp.data = make([]byte, cp)
 	bp.notFull.L = &bp.lock
 	bp.notEmpty.L = &bp.lock
 	pr := &BufferedPipeReader{bp}
