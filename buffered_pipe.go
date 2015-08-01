@@ -152,7 +152,7 @@ func (r *BufferedPipeReader) Read(data []byte) (n int, err error) {
 }
 
 // block until len(data) bytes has ben read
-// a deadlock may happen when ReadBlock and WriteBlock both be used
+// warn: a deadlock may happen when ReadBlock and WriteBlock both be used
 func (r *BufferedPipeReader) ReadBlock(data []byte) (n int, err error) {
 	return r.bp.read(data, len(data))
 }
@@ -189,7 +189,7 @@ func (w *BufferedPipeWriter) Write(data []byte) (n int, err error) {
 }
 
 // block until len(data) bytes has ben written
-// a deadlock may happen when ReadBlock and WriteBlock both be used
+// warn: a deadlock may happen when ReadBlock and WriteBlock both be used
 func (w *BufferedPipeWriter) WriteBlock(data []byte) (n int, err error) {
 	return w.bp.write(data, len(data))
 }
