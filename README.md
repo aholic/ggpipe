@@ -25,12 +25,14 @@
 
 睡觉的时候一直觉得很奇怪，明显一块一块的拷贝比一个一个的拷贝好啊，凭啥慢这么多。
 而且go test -bench的输出里面，x ns/op的operation，指的是什么operation啊？
+
 结果呵呵呵，我又tm被打脸了，原来不是operation，是loop，尼玛，也就是说BufferedPipe比channel快10倍。
 后来发现bench test里面的代码有一点小问题，BufferedPipe传输的字节稍微少了一点，所以改了下代码，大概快7倍的样子。
 
 ##### 结论 #####
 
 ~~channel大法好~~
+
 没文化真可怕
 
 ##### 代码在哪 #####
