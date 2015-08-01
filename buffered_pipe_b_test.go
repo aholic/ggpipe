@@ -20,7 +20,7 @@ func BenchmarkBufferedPipe(b *testing.B) {
 		done <- true
 	}()
 	go func() {
-		tmp := make([]byte, 100)
+		tmp := make([]byte, cp)
 		for {
 			_, err := pr.Read(tmp)
 			if err != nil {
