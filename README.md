@@ -27,6 +27,7 @@
 而且go test -bench的输出里面，x ns/op的operation，指的是什么operation啊？
 
 结果呵呵呵，我又tm被打脸了，原来不是operation，是loop，尼玛，也就是说BufferedPipe比channel快10倍。
+然而我想起来了，我昨晚看反了，看成了op/ns，擦。智商真拙计。
 后来发现bench test里面的代码有一点小问题，BufferedPipe传输的字节稍微少了一点，所以改了下代码，大概快7倍的样子。
 
 ##### 结论 #####
