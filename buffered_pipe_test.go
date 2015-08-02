@@ -30,19 +30,19 @@ func TestWriter(t *testing.T) {
 	if n, err := pw.Write(data[:wc1]); err != nil {
 		t.Errorf("expect: %v, actual: %v", nil, err)
 	} else if n != wc1 {
-		t.Errorf("expect: %vv, actual: %v", wc1, n)
+		t.Errorf("expect: %v, actual: %v", wc1, n)
 	}
 
 	if n, err := pw.WriteBlock(data[:wc2]); err != nil {
 		t.Errorf("expect: %v, actual: %v", nil, err)
 	} else if n != wc2 {
-		t.Errorf("expect: %vv, actual: %v", wc1, n)
+		t.Errorf("expect: %v, actual: %v", wc1, n)
 	}
 
 	if n, err := pw.WriteBlock(data); n != 0 {
-		t.Errorf("expect: %vv, actual: %v", 0, n)
+		t.Errorf("expect: %v, actual: %v", 0, n)
 	} else if err != ErrTooLargeProvide {
-		t.Errorf("expect: %vv, actual: %v", ErrTooLargeProvide, err)
+		t.Errorf("expect: %v, actual: %v", ErrTooLargeProvide, err)
 	}
 	pw.Close()
 }
