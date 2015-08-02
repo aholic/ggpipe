@@ -24,8 +24,8 @@ type bufferedPipe struct {
 	data     []byte     //data buffer
 	cp       int        //the max size of data can be stored in buffer
 	sz       int        //the size of data currently stored in buffer
-	notEmpty sync.Cond  //tell reader to read
-	notFull  sync.Cond  //tell writer to write
+	canRead  sync.Cond  //tell reader to read
+	canWrite sync.Cond  //tell writer to write
 	rerr     error      //the ending err the reader want to tell writer
 	werr     error      //the ending err the writer want to tell reader
 }
@@ -66,14 +66,14 @@ func (bp *bufferedPipe) read(b []byte, blockSize int) (int, error) {
 			return 0, ErrTooLargeDemand
 		}
 
-		bp.notEmpty.Wait()
+		bp.canRead.Wait()
 	}
 
 	n := copy(b, bp.data)
 	bp.sz -= n
 
 	if bp.sz < bp.cp {
-		bp.notFull.Signal()
+		bp.canWrite.Signal()
 	}
 
 	return n, nil
@@ -101,13 +101,13 @@ func (bp *bufferedPipe) write(b []byte, blockSize int) (int, error) {
 			return 0, ErrTooLargeProvide
 		}
 
-		bp.notFull.Wait()
+		bp.canWrite.Wait()
 	}
 
 	n := copy(bp.data[bp.sz:], b)
 	bp.sz += n
 	if bp.sz > 0 {
-		bp.notEmpty.Signal()
+		bp.canRead.Signal()
 	}
 
 	return n, nil
@@ -123,8 +123,8 @@ func (bp *bufferedPipe) rclose(err error) {
 	defer bp.lock.Unlock()
 
 	bp.rerr = err
-	bp.notEmpty.Signal()
-	bp.notFull.Signal()
+	bp.canRead.Signal()
+	bp.canWrite.Signal()
 }
 
 //writer close the pipe.
@@ -137,8 +137,8 @@ func (bp *bufferedPipe) wclose(err error) {
 	defer bp.lock.Unlock()
 
 	bp.werr = err
-	bp.notFull.Signal()
-	bp.notEmpty.Signal()
+	bp.canWrite.Signal()
+	bp.canRead.Signal()
 }
 
 type BufferedPipeReader struct {
@@ -220,8 +220,8 @@ func BufferedPipe(cp int) (*BufferedPipeReader, *BufferedPipeWriter) {
 	bp := new(bufferedPipe)
 	bp.cp = cp
 	bp.data = make([]byte, cp)
-	bp.notFull.L = &bp.lock
-	bp.notEmpty.L = &bp.lock
+	bp.canWrite.L = &bp.lock
+	bp.canRead.L = &bp.lock
 	pr := &BufferedPipeReader{bp}
 	pw := &BufferedPipeWriter{bp}
 
