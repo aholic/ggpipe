@@ -147,13 +147,13 @@ type BufferedPipeReader struct {
 }
 
 //read from a buffer, block until [least] bytes can be read at the same time
-//warn: a deadlock may happen, see http://
+//warn: a deadlock may happen, see http://cstdlib.com/tech/2015/08/16/buffered-pipe/
 func (r *BufferedPipeReader) Read(data []byte, least int) (n int, err error) {
 	return r.bp.read(data, least)
 }
 
 //block until [len(data)] bytes can be read at the same time
-//warn: a deadlock may happen, see http://
+//warn: a deadlock may happen, see http://cstdlib.com/tech/2015/08/16/buffered-pipe/
 func (r *BufferedPipeReader) BlockRead(data []byte) (n int, err error) {
 	return r.bp.read(data, len(data))
 }
@@ -213,13 +213,13 @@ func (w *BufferedPipeWriter) DeadlockFreeBlockWrite(data []byte, least int) (n i
 }
 
 //write to a buffer, block until [least] bytes can be written at the same time
-//warn: a deadlock may happen, see http://
+//warn: a deadlock may happen, see http://cstdlib.com/tech/2015/08/16/buffered-pipe/
 func (w *BufferedPipeWriter) Write(data []byte, least int) (n int, err error) {
 	return w.bp.write(data, least)
 }
 
 //block until all bytes in [data] can be written at the same time
-//warn: a deadlock may happen, see http://
+//warn: a deadlock may happen, see http://cstdlib.com/tech/2015/08/16/buffered-pipe/
 func (w *BufferedPipeWriter) BlockWrite(data []byte) (n int, err error) {
 	return w.bp.write(data, len(data))
 }
