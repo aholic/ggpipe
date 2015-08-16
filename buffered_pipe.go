@@ -9,11 +9,11 @@ import (
 )
 
 var (
-	//occurs when ReadBlock with a block size larger than capacity
-	ErrTooLargeDemand = errors.New("demand is not supposed to be larger than capacity")
+	//occurs when BlockRead with a block size larger than capacity
+	ErrTooLargeDemand = errors.New("read is not supposed to be larger than capacity")
 
-	//occurs when WriteBlock with a block size larger than capacity
-	ErrTooLargeProvide = errors.New("provide is not supposed to be larger than capacity")
+	//occurs when BlockWrite with a block size larger than capacity
+	ErrTooLargeProvide = errors.New("write is not supposed to be larger than capacity")
 
 	//default error occurs when any operation after the reader call close
 	ErrReaderClosed = errors.New("pipe already close by reader")
@@ -46,6 +46,10 @@ func (bp *bufferedPipe) buffered() int {
 
 //read data from pipe, block until blockSize bytes has been read.
 func (bp *bufferedPipe) read(b []byte, blockSize int) (int, error) {
+	if blockSize > bp.cp {
+		return 0, ErrTooLargeDemand
+	}
+
 	bp.lock.Lock()
 	defer bp.lock.Unlock()
 
@@ -62,15 +66,12 @@ func (bp *bufferedPipe) read(b []byte, blockSize int) (int, error) {
 			return 0, bp.werr
 		}
 
-		if blockSize > bp.cp {
-			return 0, ErrTooLargeDemand
-		}
-
 		bp.canRead.Wait()
 	}
 
-	n := copy(b, bp.data)
+	n := copy(b, bp.data[:bp.sz])
 	bp.sz -= n
+	copy(bp.data[:bp.sz], bp.data[n:n+bp.sz])
 
 	if bp.sz < bp.cp {
 		bp.canWrite.Signal()
@@ -81,6 +82,10 @@ func (bp *bufferedPipe) read(b []byte, blockSize int) (int, error) {
 
 //write data to pipe, block until blockSize bytes has been written.
 func (bp *bufferedPipe) write(b []byte, blockSize int) (int, error) {
+	if blockSize > bp.cp {
+		return 0, ErrTooLargeProvide
+	}
+
 	bp.lock.Lock()
 	defer bp.lock.Unlock()
 
@@ -95,10 +100,6 @@ func (bp *bufferedPipe) write(b []byte, blockSize int) (int, error) {
 
 		if bp.rerr != nil {
 			return 0, bp.rerr
-		}
-
-		if blockSize > bp.cp {
-			return 0, ErrTooLargeProvide
 		}
 
 		bp.canWrite.Wait()
@@ -145,16 +146,33 @@ type BufferedPipeReader struct {
 	bp *bufferedPipe
 }
 
-//read data from pipe as much as possible, max : len(data).
-//if there is no data currently in the pipe, it will block.
-func (r *BufferedPipeReader) Read(data []byte) (n int, err error) {
-	return r.bp.read(data, 1)
+//read from a buffer, block until [least] bytes can be read at the same time
+//warn: a deadlock may happen, see http://
+func (r *BufferedPipeReader) Read(data []byte, least int) (n int, err error) {
+	return r.bp.read(data, least)
 }
 
-//block until len(data) bytes has ben read.
-//warn: a deadlock may happen when ReadBlock and WriteBlock both be used.
-func (r *BufferedPipeReader) ReadBlock(data []byte) (n int, err error) {
+//block until [len(data)] bytes can be read at the same time
+//warn: a deadlock may happen, see http://
+func (r *BufferedPipeReader) BlockRead(data []byte) (n int, err error) {
 	return r.bp.read(data, len(data))
+}
+
+//read from a buffer, block until [least] bytes has been read
+//deadlock free, but in the worst case, it will read byte one by one
+func (w *BufferedPipeReader) DeadlockFreeBlockRead(data []byte, least int) (n int, err error) {
+	tmp := 0
+	for n < least && err == nil {
+		tmp, err = w.bp.read(data, 1)
+		n += tmp
+		data = data[tmp:]
+	}
+	return
+}
+
+//read at most [len(data)] bytes, return immediately if no data available
+func (w *BufferedPipeReader) NonBlockRead(data []byte) (n int, err error) {
+	return w.bp.read(data, 0)
 }
 
 //normal close, without error.
@@ -182,16 +200,33 @@ type BufferedPipeWriter struct {
 	bp *bufferedPipe
 }
 
-//write data to pipe as much as possible, max to len(data).
-//if there is no data currently can be written to the pipe, it will block.
-func (w *BufferedPipeWriter) Write(data []byte) (n int, err error) {
-	return w.bp.write(data, 1)
+//write to a buffer, block until [least] bytes has been written
+//deadlock free, but in the worst case, it will write byte one by one
+func (w *BufferedPipeWriter) DeadlockFreeBlockWrite(data []byte, least int) (n int, err error) {
+	tmp := 0
+	for n < least && err == nil {
+		tmp, err = w.bp.write(data, 1)
+		n += tmp
+		data = data[tmp:]
+	}
+	return
 }
 
-//block until len(data) bytes has ben written.
-//warn: a deadlock may happen when ReadBlock and WriteBlock both be used.
-func (w *BufferedPipeWriter) WriteBlock(data []byte) (n int, err error) {
+//write to a buffer, block until [least] bytes can be written at the same time
+//warn: a deadlock may happen, see http://
+func (w *BufferedPipeWriter) Write(data []byte, least int) (n int, err error) {
+	return w.bp.write(data, least)
+}
+
+//block until all bytes in [data] can be written at the same time
+//warn: a deadlock may happen, see http://
+func (w *BufferedPipeWriter) BlockWrite(data []byte) (n int, err error) {
 	return w.bp.write(data, len(data))
+}
+
+//write at most len(data) bytes, return immediately if no buffer space available
+func (w *BufferedPipeWriter) NonBlockWrite(data []byte) (n int, err error) {
+	return w.bp.write(data, 0)
 }
 
 //close with a error that will be got by the reader.
@@ -217,6 +252,10 @@ func (w *BufferedPipeWriter) Capacity() int {
 
 //new a pipe with capacity.
 func BufferedPipe(cp int) (*BufferedPipeReader, *BufferedPipeWriter) {
+	if cp <= 0 {
+		panic("no sense for capacity lower then 1")
+	}
+
 	bp := new(bufferedPipe)
 	bp.cp = cp
 	bp.data = make([]byte, cp)
